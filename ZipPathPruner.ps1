@@ -35,10 +35,7 @@ if (-not (Test-Path $SourcePath)) {
     return
 }
 $SourcePath = Resolve-Path $SourcePath
-if (-not (Test-Path $DestPath)) {
-    New-Item -ItemType Directory -Path $DestPath -Force | Out-Null
-}
-$DestPath = Resolve-Path $DestPath
+$DestPath = [System.IO.Path]::GetFullPath($DestPath)
 
 # 一時フォルダのベース作成
 $TempBase = Join-Path ([System.IO.Path]::GetTempPath()) "ZipPathPruner_$(Get-Random)"
@@ -152,6 +149,11 @@ try {
         if ($confirm -ne 'y') {
             Write-Host "処理を中止しました。"
             return
+        }
+
+        # 出力フォルダの作成（存在しない場合のみ）
+        if (-not (Test-Path $DestPath)) {
+            New-Item -ItemType Directory -Path $DestPath -Force | Out-Null
         }
     } else {
         Write-Host "剪定が必要なZipファイルは見つかりませんでした。処理を終了します。"
