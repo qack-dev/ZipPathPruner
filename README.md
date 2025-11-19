@@ -38,7 +38,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ZipPathPruner.ps1 -SourcePat
 ```
 
 実行すると、フォルダ構造を持つZipファイルが見つかった場合に確認メッセージが表示されます。
-`y` を入力すると処理が開始されます。
+`y` を入力しEnterを押すと処理が開始されます。
 
 ## 剪定（Pruning）のイメージ
 
