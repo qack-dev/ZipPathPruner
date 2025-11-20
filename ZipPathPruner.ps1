@@ -124,23 +124,35 @@ try {
         return
     }
 
-    # フォルダ構造チェック（確認用）
-    $needsPruning = $false
-    foreach ($zipFile in $zipFiles) {
+    # Zipファイルがフォルダ構造を持つか判定する関数
+    function Test-ZipHasFolders {
+        param (
+            [string]$ZipPath
+        )
         try {
-            $archive = [System.IO.Compression.ZipFile]::OpenRead($zipFile.FullName)
+            $archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+            $hasFolders = $false
             foreach ($entry in $archive.Entries) {
-                # エントリ名に '/' または '\' が含まれている場合はフォルダ階層があるとみなす
                 if ($entry.FullName.IndexOf("/") -ge 0 -or $entry.FullName.IndexOf("\") -ge 0) {
-                    $needsPruning = $true
+                    $hasFolders = $true
                     break
                 }
             }
             $archive.Dispose()
+            return $hasFolders
         } catch {
-            Write-Warning "Zipファイルの読み込みに失敗しました: $($zipFile.Name)"
+            Write-Warning "Zipファイルの読み込みに失敗しました: $ZipPath"
+            return $false
         }
-        if ($needsPruning) { break }
+    }
+
+    # フォルダ構造チェック（確認用）
+    $needsPruning = $false
+    foreach ($zipFile in $zipFiles) {
+        if (Test-ZipHasFolders -ZipPath $zipFile.FullName) {
+            $needsPruning = $true
+            break
+        }
     }
 
     # ユーザー確認
@@ -183,30 +195,36 @@ try {
             New-Item -ItemType Directory -Path $destZipDir -Force | Out-Null
         }
 
-        Write-Host "処理中: $relPath"
-        
-        # 新しいZip用の一時フォルダ
-        $newZipContentDir = Join-Path $TempBase "NewZip_$(Get-Random)"
-        New-Item -ItemType Directory -Path $newZipContentDir -Force | Out-Null
-
-        # 剪定実行
-        $depth = Prune-ZipStructure -CurrentZipPath $zipFile.FullName -OutputFolder $newZipContentDir -Depth 1 -TempBase $TempBase
-        if ($depth -gt $globalMaxDepth) {
-            $globalMaxDepth = $depth
-        }
-
         # 既存の出力ファイルがあれば削除
         if (Test-Path $destZipPath) {
             Remove-Item -Path $destZipPath -Force
         }
 
-        # 新しいZipの作成
-        [System.IO.Compression.ZipFile]::CreateFromDirectory($newZipContentDir, $destZipPath)
-        
-        Write-Host "完了: $relPath"
+        if (Test-ZipHasFolders -ZipPath $zipFile.FullName) {
+            Write-Host "処理中 (剪定): $relPath"
+            
+            # 新しいZip用の一時フォルダ
+            $newZipContentDir = Join-Path $TempBase "NewZip_$(Get-Random)"
+            New-Item -ItemType Directory -Path $newZipContentDir -Force | Out-Null
 
-        # クリーンアップ
-        Remove-Item -Path $newZipContentDir -Recurse -Force
+            # 剪定実行
+            $depth = Prune-ZipStructure -CurrentZipPath $zipFile.FullName -OutputFolder $newZipContentDir -Depth 1 -TempBase $TempBase
+            if ($depth -gt $globalMaxDepth) {
+                $globalMaxDepth = $depth
+            }
+
+            # 新しいZipの作成
+            [System.IO.Compression.ZipFile]::CreateFromDirectory($newZipContentDir, $destZipPath)
+            
+            # クリーンアップ
+            Remove-Item -Path $newZipContentDir -Recurse -Force
+            
+            Write-Host "完了: $relPath"
+        } else {
+            Write-Host "処理中 (コピー): $relPath"
+            Copy-Item -Path $zipFile.FullName -Destination $destZipPath
+            Write-Host "完了: $relPath"
+        }
     }
     
     Write-Host "全ての処理が完了しました。"
